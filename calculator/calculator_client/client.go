@@ -20,10 +20,13 @@ func main() {
 	defer cc.Close()
 
 	c := calculatorpb.NewCalculatorServiceClient(cc)
+	//Uncomment
+	//doUnary(c)
 
-	doUnary(c)
+	//Uncomment
+	//doServerStreaming(c)
 
-	doServerStreaming(c)
+	doClientStreaming(c)
 }
 
 func doUnary(c calculatorpb.CalculatorServiceClient) {
@@ -58,4 +61,28 @@ func doServerStreaming(c calculatorpb.CalculatorServiceClient) {
 		}
 		fmt.Println(res.GetPrimeFactor())
 	}
+}
+
+func doClientStreaming(c calculatorpb.CalculatorServiceClient) {
+	fmt.Println("Staring to do a ComputeAverage Client Streaming RPC...")
+
+	stream, err := c.ComputeAverage(context.Background())
+	if err != nil {
+		log.Fatalf("Error while opening stream: %v", err)
+	}
+
+	numbers := []int32{3, 5, 9, 54, 23}
+
+	for _, number := range numbers {
+		fmt.Printf("Sending number: %v\n", number)
+		stream.Send(&calculatorpb.ComputeAverageRequest{
+			Number: number,
+		})
+	}
+	res, err := stream.CloseAndRecv()
+	if err != nil {
+		log.Fatalf("Error while reciving response: %v", err)
+	}
+
+	fmt.Printf("The Average is: %v", res.GetAverage())
 }
