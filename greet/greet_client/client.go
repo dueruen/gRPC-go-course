@@ -7,14 +7,34 @@ import (
 	"log"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/dueruen/gRPC-go-course/greet/greetpb"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 func main() {
+	tls := true
+	opts := []grpc.DialOption{}
+
 	fmt.Println("Hello I'm a client")
-	cc, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+
+	if tls {
+		certFile := "../../ssl/ca.crt"
+		creds, sslErr := credentials.NewClientTLSFromFile(certFile, "")
+		if sslErr != nil {
+			log.Fatalf("Error while loading CA trust certificate: %v", sslErr)
+			return
+		}
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	cc, err := grpc.Dial("localhost:50051", opts...)
 	if err != nil {
 		log.Fatalf("Could not connect %v", err)
 	}
@@ -22,16 +42,16 @@ func main() {
 
 	c := greetpb.NewGreetServiceClient(cc)
 
-	//Uncomment
-	//doUnary(c)
+	doUnary(c)
 
-	//Uncomment
 	//doServerStreaming(c)
 
-	//Uncomment
 	//doClientStreaming(c)
 
-	doBiDiStreaming(c)
+	//doBiDiStreaming(c)
+
+	//doUnaryWithDeadline(c, 1*time.Second)
+	//doUnaryWithDeadline(c, 5*time.Second)
 }
 
 func doUnary(c greetpb.GreetServiceClient) {
@@ -190,4 +210,32 @@ func doBiDiStreaming(c greetpb.GreetServiceClient) {
 	}()
 	// block until everything is done
 	<-waitc
+}
+
+func doUnaryWithDeadline(c greetpb.GreetServiceClient, timeout time.Duration) {
+	fmt.Println("Staring to do a UnaryWithDeadline RPC...")
+	req := &greetpb.GreetWitDeadlineRequest{
+		Greeting: &greetpb.Greeting{
+			FirstName: "FirstName",
+			LastName:  "LastName",
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	res, err := c.GreetWitDeadline(ctx, req)
+	if err != nil {
+		statusErr, ok := status.FromError(err)
+		if ok {
+			if statusErr.Code() == codes.DeadlineExceeded {
+				fmt.Println("Timeout was hit! Deadline was exceeded")
+			} else {
+				fmt.Printf("unexpacted error: %v", statusErr)
+			}
+		} else {
+			log.Fatalf("error while calling Greet RPC: %v", err)
+		}
+		return
+	}
+	log.Printf("Response from Greet: %v", res.Result)
 }
